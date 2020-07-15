@@ -38,17 +38,13 @@ const booleanMap = std.ComptimeStringMap(bool, .{
     .{ "N", false },
 });
 
-pub fn parse(comptime T: type, data: []const u8, buffer: []u8) !T {
+pub fn parse(comptime T: type, data: []const u8) !T {
     var seek: usize = 0;
     var state: TokenizerState = .nil;
     var val = std.mem.zeroes(T);
-
     var csec: []const u8 = "";
     var cid: []const u8 = "";
-
-    while (consume(data[0..], &seek, &state, buffer)) |token| {
-        std.mem.set(u8, buffer, 0);
-
+    while (consume(data[0..], &seek, &state)) |token| {
         switch (token.kind) {
             .nil => {},
             .section => {
@@ -56,7 +52,7 @@ pub fn parse(comptime T: type, data: []const u8, buffer: []u8) !T {
             },
             .identifier => {
                 cid = token.value.?;
-                var tk = consume(data[0..], &seek, &state, buffer).?;
+                var tk = consume(data[0..], &seek, &state).?;
                 if (tk.kind == .value) {
                     switch (@typeInfo(T)) {
                         .Struct => |inf| {
@@ -123,16 +119,14 @@ pub const IniResult = struct {
     }
 };
 
-fn parseIntoMap(data: []const u8, allocator: *std.mem.Allocator, buffer: []u8) !IniResult {
+fn parseIntoMap(data: []const u8, allocator: *std.mem.Allocator) !IniResult {
     var seek: usize = 0;
     var state: TokenizerState = .nil;
     var pstate: TokenizerState = .nil;
-
     var csec: []const u8 = "";
     var cid: []const u8 = "";
-
     var map = IniMap.init(allocator);
-    while (consume(data[0..], &seek, &state, buffer)) |token| {
+    while (consume(data[0..], &seek, &state)) |token| {
         switch (token.kind) {
             .nil => {},
             .comment => {},
@@ -141,7 +135,7 @@ fn parseIntoMap(data: []const u8, allocator: *std.mem.Allocator, buffer: []u8) !
             },
             .identifier => {
                 cid = token.value.?;
-                var tk = consume(data[0..], &seek, &state, buffer).?;
+                var tk = consume(data[0..], &seek, &state).?;
                 if (tk.kind == .value) {
                     var len = std.fmt.count("{}.{}", .{ csec, cid });
                     var coc = try std.fmt.allocPrint(allocator, "{}.{}", .{ csec, cid });
@@ -161,14 +155,12 @@ fn parseIntoMap(data: []const u8, allocator: *std.mem.Allocator, buffer: []u8) !
     };
 }
 
-fn consume(data: []const u8, seek: *usize, state: *TokenizerState, buffer: []u8) ?Token {
+fn consume(data: []const u8, seek: *usize, state: *TokenizerState) ?Token {
     if (seek.* >= data.len) return null;
     var token: Token = std.mem.zeroes(Token);
     var start = seek.*;
     var end = start;
     var char: u8 = 0;
-    var pointer: usize = 0;
-    std.mem.set(u8, buffer, 0);
 
     @setEvalBranchQuota(100000);
     while (char != '\n') {
@@ -278,11 +270,8 @@ test "parse into map" {
     var data = try std.testing.allocator.alloc(u8, try file.getEndPos());
     defer std.testing.allocator.free(data);
     _ = try file.read(data);
-
-    var buffer = try std.testing.allocator.alloc(u8, TEST_BUFFER_SIZE);  // [1]u8{0} ** 256;
-    defer std.testing.allocator.free(buffer);
     
-    var ini = try parseIntoMap(data, std.testing.allocator, buffer[0..]);
+    var ini = try parseIntoMap(data, std.testing.allocator);
     defer ini.deinit();
 
     std.testing.expectEqualStrings("John Doe", ini.map.get("owner.name").?);
@@ -300,9 +289,6 @@ test "parse into struct" {
     defer std.testing.allocator.free(data);
     _ = try file.read(data);
 
-    var buffer = try std.testing.allocator.alloc(u8, TEST_BUFFER_SIZE);
-    defer std.testing.allocator.free(buffer);
-
     const Config = struct {
         owner: struct {
             name: []const u8,
@@ -316,7 +302,7 @@ test "parse into struct" {
         },
     };
 
-    var config = try parse(Config, data, buffer[0..]);
+    var config = try parse(Config, data);
 
     std.testing.expectEqualStrings("John Doe", config.owner.name);
     std.testing.expectEqualStrings("Acme Widgets Inc.", config.owner.organization);
@@ -342,8 +328,7 @@ test "parse in comptime into struct" {
             },
         };
 
-        var buffer = [1]u8{0} ** TEST_BUFFER_SIZE;
-        var config = try parse(Config, data, buffer[0..]);
+        var config = try parse(Config, data);
         break :block config;
     };
 

@@ -26,8 +26,7 @@ const ExampleConfig = struct {
     }
 }
 // Parse `.ini` from memory
-var buf: [_]u8{0} ** 64;
-var conf = parse(ExampleConfig, fc, buf);
+var conf = parse(ExampleConfig, fc);
 ```
 
 ### `parse()` in `comptime` block
@@ -44,8 +43,7 @@ comptime {
         }
     }
     // Parse `.ini`
-    var buf: [_]u8{0} ** 64;
-    var conf = parse(ExampleConfig, fc, buf);
+    var conf = parse(ExampleConfig, fc);
 }
 ```
 
@@ -57,8 +55,7 @@ defer fd.close();
 var fc = try allocator.alloc(u8, try fd.getEndPos());
 defer allocator.free(fc);
 // Parse `.ini` from memory.
-var buf: [_]u8{0} ** 64;
-var ini = try parseIntoMap(fc, allocator, buf[0..]);
+var ini = try parseIntoMap(fc, allocator);
 defer ini.deinit();
 
 // `ini.map` now contains a hash map with the contents.
