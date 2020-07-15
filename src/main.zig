@@ -27,32 +27,28 @@ const booleanMap = std.ComptimeStringHashMap(bool, .{
     .{ "n", false },
 });
 
-pub fn openC(comptime T: type, comptime filename: []const u8) !T {
-    // implement!
-}
-
-pub fn openS(comptime T: type, filename: []const u8, allocator: *std.mem.Allocator) !T {
-    // implement!
-}
-
-pub fn openM(filename: []const u8, allocator: *std.mem.Allocator) !std.StringHashMap([]const u8) {
-    var ret = std.StringHashMap([]const u8).init(allocator);
-    var file = try std.fs.cwd().openFile(filename, .{ .read = true, .write = true });
-    defer file.close();
-    var data = try allocator.alloc(u8, try file.getEndPos());
-    _ = try file.read(data);
-
+pub fn parseIntoStruct(comptime T: type, buffer: []const u8) !T {
     var seek: usize = 0;
     var state: TokenizerState = .nil;
-
-    while (parseToken(data, &seek, &state)) |token| {
-        std.debug.print("{}\n", .{token});
+    var val = std.mem.zeroes(T);
+    while (parseToken(buffer[0..], &seek, &state)) |token| {
+        // TODO: Implement parsing
     }
-
-    return ret;
+    return val;
 }
 
-fn parseToken(data: []u8, seek: *usize, state: *TokenizerState) ?Token {
+const IniMap = std.StringHashMap([]const u8);
+pub fn parseIntoMap(buffer: []const u8, allocator: *std.mem.Allocator) !IniMap {
+    var seek: usize = 0;
+    var state: TokenizerState = .nil;
+    var map = IniMap.init(allocator);
+    while (parseToken(buffer[0..], &seek, &state)) |token| {
+        // TODO: Implement parsing
+    }
+    return map;
+}
+
+fn parseToken(data: []const u8, seek: *usize, state: *TokenizerState) ?Token {
     if (seek.* >= data.len) return null;
     var token: Token = std.mem.zeroes(Token);
     var start = seek.*;
@@ -96,8 +92,52 @@ fn parseToken(data: []u8, seek: *usize, state: *TokenizerState) ?Token {
 
 
 // Tests
-test "open INI file as map" {
-    std.debug.print("\n", .{});
-    var hm = try openM("test.ini", std.heap.page_allocator);
-    hm.deinit();
+test "parse into map" {
+    var file = try std.fs.cwd().openFile("src/test.ini", .{ .read = true, .write = false });
+    defer file.close();
+    var data = try std.testing.allocator.alloc(u8, try file.getEndPos());
+    defer std.testing.allocator.free(data);
+    _ = try file.read(data);
+    var map = parseIntoMap(data, std.testing.allocator);
+}
+
+test "parse into struct" {
+    var file = try std.fs.cwd().openFile("src/test.ini", .{ .read = true, .write = false });
+    defer file.close();
+    var data = try std.testing.allocator.alloc(u8, try file.getEndPos());
+    defer std.testing.allocator.free(data);
+    _ = try file.read(data);
+
+    const Config = struct {
+        owner: struct {
+            name: []const u8,
+            organization: []const u8,
+        },
+        database: struct {
+            server: []const u8,
+            port: usize,
+            file: []const u8,
+        },
+    };
+
+    var config = parseIntoStruct(Config, data);
+}
+
+test "parse in comptime into struct" {
+    comptime {
+        const data = @embedFile("test.ini");
+        const Config = struct {
+            owner: struct {
+                name: []const u8,
+                organization: []const u8,
+            },
+            database: struct {
+                server: []const u8,
+                port: usize,
+                file: []const u8,
+            },
+        };
+
+        var config = parseIntoStruct(Config, data);
+    }
 }
