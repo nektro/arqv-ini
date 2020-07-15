@@ -119,7 +119,7 @@ pub const IniResult = struct {
     }
 };
 
-fn parseIntoMap(data: []const u8, allocator: *std.mem.Allocator) !IniResult {
+pub fn parseIntoMap(data: []const u8, allocator: *std.mem.Allocator) !IniResult {
     var seek: usize = 0;
     var state: TokenizerState = .nil;
     var pstate: TokenizerState = .nil;
@@ -261,8 +261,6 @@ fn consume(data: []const u8, seek: *usize, state: *TokenizerState) ?Token {
 
     return token;
 }
-
-const TEST_BUFFER_SIZE = 64;
 
 test "parse into map" {
     var file = try std.fs.cwd().openFile("src/test.ini", .{ .read = true, .write = false });
