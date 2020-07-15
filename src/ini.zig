@@ -135,6 +135,7 @@ fn parseIntoMap(data: []const u8, allocator: *std.mem.Allocator, buffer: []u8) !
     while (consume(data[0..], &seek, &state, buffer)) |token| {
         switch (token.kind) {
             .nil => {},
+            .comment => {},
             .section => {
                 csec = token.value.?;
             },
@@ -149,7 +150,6 @@ fn parseIntoMap(data: []const u8, allocator: *std.mem.Allocator, buffer: []u8) !
                     return error.IniSyntaxError;
                 }
             },
-            .comment => {},
             else => {
                 return error.IniSyntaxError;
             },
@@ -174,7 +174,6 @@ fn consume(data: []const u8, seek: *usize, state: *TokenizerState, buffer: []u8)
     while (char != '\n') {
         char = data[seek.*];
         seek.* += 1;
-
         switch (state.*) {
             .nil => {
                 switch (char) {
@@ -206,7 +205,7 @@ fn consume(data: []const u8, seek: *usize, state: *TokenizerState, buffer: []u8)
             },
             .identifier => {
                 end += 1;
-                if (!(std.ascii.isAlNum(char) or char == '_' or char == '-')) {
+                if (!(std.ascii.isAlNum(char) or char == '_')) {
                     state.* = .nil;
                     return Token{
                         .kind = .identifier,
@@ -242,11 +241,12 @@ fn consume(data: []const u8, seek: *usize, state: *TokenizerState, buffer: []u8)
             },
             .value => {
                 switch (char) {
-                    '"' => {
-                        state.* = .string;
-                        std.mem.set(u8, buffer[0..], 0);
-                        start = seek.*;
-                        end = start;
+                    ';' => {
+                        state.* = .comment;
+                        return Token{
+                            .kind = .value,
+                            .value = data[start .. end - 2],
+                        };
                     },
                     else => {
                         end += 1;
@@ -260,37 +260,6 @@ fn consume(data: []const u8, seek: *usize, state: *TokenizerState, buffer: []u8)
                             },
                             else => {},
                         }
-                    },
-                }
-            },
-            .string => {
-                end += 1;
-                switch (char) {
-                    '\\' => {
-                        var nx = data[seek.*];
-                        seek.* += 1;
-                        switch (nx) {
-                            'n' => {
-                                buffer[pointer] = '\n';
-                                pointer += 1;
-                            },
-                            '"' => {
-                                buffer[pointer] = '"';
-                                pointer += 1;
-                            },
-                            else => {},
-                        }
-                    },
-                    '"' => {
-                        state.* = .nil;
-                        return Token{
-                            .kind = .value,
-                            .value = buffer[0..pointer],
-                        };
-                    },
-                    else => {
-                        buffer[pointer] = char;
-                        pointer += 1;
                     },
                 }
             },
