@@ -3,19 +3,18 @@ const std = @import("std");
 const Token = struct {
     kind: enum {
         nil, comment, section, identifier, value
-    },
-    value: ?[]const u8
+    }, value: ?[]const u8
 };
 const TokenizerState = enum(u3) {
-    nil,
-    comment,
-    section,
-    identifier,
-    value,
-    string
+    nil, comment, section, identifier, value, string
 };
 
 const booleanMap = std.ComptimeStringMap(bool, .{
+    .{ "1", true },
+    .{ "enabled", true },
+    .{ "Enabled", true },
+    .{ "on", true },
+    .{ "On", true },
     .{ "true", true },
     .{ "t", true },
     .{ "True", true },
@@ -24,6 +23,11 @@ const booleanMap = std.ComptimeStringMap(bool, .{
     .{ "y", true },
     .{ "Yes", true },
     .{ "Y", true },
+    .{ "0", false },
+    .{ "disabled", false },
+    .{ "Disabled", false },
+    .{ "off", false },
+    .{ "Off", false },
     .{ "false", false },
     .{ "f", false },
     .{ "False", false },
@@ -31,7 +35,7 @@ const booleanMap = std.ComptimeStringMap(bool, .{
     .{ "no", false },
     .{ "n", false },
     .{ "No", false },
-    .{ "N", false}
+    .{ "N", false },
 });
 
 pub fn parse(comptime T: type, data: []const u8, buffer: []u8) !T {
@@ -42,54 +46,56 @@ pub fn parse(comptime T: type, data: []const u8, buffer: []u8) !T {
     var csec: []const u8 = "";
     var cid: []const u8 = "";
 
-    while (parseToken(data[0..], &seek, &state, buffer)) |token| {
-        // TODO: Implement parsing
+    while (consume(data[0..], &seek, &state, buffer)) |token| {
         std.mem.set(u8, buffer, 0);
-        
-        switch(token.kind) {
+
+        switch (token.kind) {
             .nil => {},
             .section => {
                 csec = token.value.?;
             },
             .identifier => {
                 cid = token.value.?;
-                var tk = parseToken(data[0..], &seek, &state, buffer).?;
-                switch(@typeInfo(T)) {
-                    .Struct => |inf| {
-                        inline for (inf.fields) |f,i| {
-                            if(std.mem.eql(u8, f.name, csec)) {
-                                switch(@typeInfo(@TypeOf(@field(val, f.name)))) {
-                                    .Struct => |if2| {
-                                        inline for (if2.fields) |ff,ii| {
-                                                 if(std.mem.eql(u8, ff.name, cid)) {
-                                                 const TT = ff.field_type;
-                                                 @field(@field(val, f.name), ff.name) = coerce(TT, tk.value.?) catch unreachable; // error.IniInvalidCoerce;
-                                             }
-                                        }
-                                    },
-                                    else => {
-                                        @compileError("Naked field in archetype.");
+                var tk = consume(data[0..], &seek, &state, buffer).?;
+                if (tk.kind == .value) {
+                    switch (@typeInfo(T)) {
+                        .Struct => |inf| {
+                            inline for (inf.fields) |f, i| {
+                                if (std.mem.eql(u8, f.name, csec)) {
+                                    switch (@typeInfo(@TypeOf(@field(val, f.name)))) {
+                                        .Struct => |if2| {
+                                            inline for (if2.fields) |ff, ii| {
+                                                if (std.mem.eql(u8, ff.name, cid)) {
+                                                    const TT = ff.field_type;
+                                                    @field(@field(val, f.name), ff.name) = coerce(TT, tk.value.?) catch unreachable; // error.IniInvalidCoerce;
+                                                }
+                                            }
+                                        },
+                                        else => {
+                                            @compileError("Naked field in archetype.");
+                                        },
                                     }
                                 }
                             }
-                        }
-                    },
-                    else => {
-                        @compileError("Invalid archetype");
+                        },
+                        else => {
+                            @compileError("Invalid archetype");
+                        },
                     }
+                } else {
+                    return error.IniSyntaxError;
                 }
             },
             .comment => {},
             else => {
                 return error.IniSyntaxError;
-            }
+            },
         }
     }
     return val;
 }
-
 fn coerce(comptime T: type, v: []const u8) !T {
-    switch(@typeInfo(T)) {
+    switch (@typeInfo(T)) {
         .Bool => {
             return booleanMap.get(v).?;
         },
@@ -101,15 +107,23 @@ fn coerce(comptime T: type, v: []const u8) !T {
         },
         else => {
             return @as(T, v);
-        }
+        },
     }
-    //return std.mem.zeroes(T);
 }
 
 const IniMap = std.StringHashMap([]const u8);
+pub const IniResult = struct {
+    map: IniMap,
+    allocator: *std.mem.Allocator,
+    pub fn deinit(self: *IniResult) void {
+        defer self.map.deinit();
+        for (self.map.items()) |i| {
+            self.allocator.free(i.key);
+        }
+    }
+};
 
-// Not working
-fn parseIntoMap(data: []const u8, allocator: *std.mem.Allocator, buffer: []u8) !IniMap {
+fn parseIntoMap(data: []const u8, allocator: *std.mem.Allocator, buffer: []u8) !IniResult {
     var seek: usize = 0;
     var state: TokenizerState = .nil;
     var pstate: TokenizerState = .nil;
@@ -118,35 +132,36 @@ fn parseIntoMap(data: []const u8, allocator: *std.mem.Allocator, buffer: []u8) !
     var cid: []const u8 = "";
 
     var map = IniMap.init(allocator);
-    while (parseToken(data[0..], &seek, &state, buffer)) |token| {
-        // TODO: Implement parsing
-        std.mem.set(u8, buffer, 0);
-        // std.debug.print("{}\n", .{token});
-        switch(token.kind) {
+    while (consume(data[0..], &seek, &state, buffer)) |token| {
+        switch (token.kind) {
             .nil => {},
             .section => {
                 csec = token.value.?;
             },
             .identifier => {
                 cid = token.value.?;
-                var tk = parseToken(data[0..], &seek, &state, buffer).?;
+                var tk = consume(data[0..], &seek, &state, buffer).?;
                 if (tk.kind == .value) {
-                    var len = std.fmt.count("{}.{}", .{csec, cid});
-                    _ = try std.fmt.bufPrint(buffer, "{}.{}", .{csec, cid});
-                    std.debug.print("Key -> {}\n", .{buffer[0..len]});
-                    try map.putNoClobber(buffer[0..len], tk.value.?);
+                    var len = std.fmt.count("{}.{}", .{ csec, cid });
+                    var coc = try std.fmt.allocPrint(allocator, "{}.{}", .{ csec, cid });
+                    try map.putNoClobber(coc, tk.value.?);
+                } else {
+                    return error.IniSyntaxError;
                 }
             },
             .comment => {},
             else => {
                 return error.IniSyntaxError;
-            }
+            },
         }
     }
-    return map;
+    return IniResult {
+        .map = map,
+        .allocator = allocator
+    };
 }
 
-fn parseToken(data: []const u8, seek: *usize, state: *TokenizerState, buffer: []u8) ?Token {
+fn consume(data: []const u8, seek: *usize, state: *TokenizerState, buffer: []u8) ?Token {
     if (seek.* >= data.len) return null;
     var token: Token = std.mem.zeroes(Token);
     var start = seek.*;
@@ -160,9 +175,9 @@ fn parseToken(data: []const u8, seek: *usize, state: *TokenizerState, buffer: []
         char = data[seek.*];
         seek.* += 1;
 
-        switch(state.*) {
+        switch (state.*) {
             .nil => {
-                switch(char) {
+                switch (char) {
                     ';' => {
                         state.* = .comment;
                         start = seek.*;
@@ -181,56 +196,52 @@ fn parseToken(data: []const u8, seek: *usize, state: *TokenizerState, buffer: []
                         end = start;
                     },
                     else => {
-                        if(!std.ascii.isSpace(char)) {
+                        if (!std.ascii.isSpace(char)) {
                             state.* = .identifier;
                             start = start;
                             end = start;
                         }
-                    }
+                    },
                 }
             },
-
             .identifier => {
                 end += 1;
-                if(!(std.ascii.isAlNum(char) or char=='_' or char=='-')) {
+                if (!(std.ascii.isAlNum(char) or char == '_' or char == '-')) {
                     state.* = .nil;
-                    return Token {
+                    return Token{
                         .kind = .identifier,
-                        .value = data[start..end]
+                        .value = data[start..end],
                     };
                 }
             },
-
             .comment => {
                 end += 1;
-                switch(char) {
+                switch (char) {
                     '\n' => {
                         state.* = .nil;
-                        return Token {
+                        return Token{
                             .kind = .comment,
-                            .value = data[start..end-2]
+                            .value = data[start .. end - 2],
                         };
                     },
-                    else => {}
+                    else => {},
                 }
             },
-
             .section => {
                 end += 1;
-                switch(char) {
+                switch (char) {
                     ']' => {
                         state.* = .nil;
-                        return Token {
+                        return Token{
                             .kind = .section,
-                            .value = data[start..end-1]
+                            .value = data[start .. end - 1],
                         };
                     },
-                    else => {}
+                    else => {},
                 }
             },
-
-            .value => {               
-                switch(char) {
+            .value => {
+                switch (char) {
                     '"' => {
                         state.* = .string;
                         std.mem.set(u8, buffer[0..], 0);
@@ -239,27 +250,26 @@ fn parseToken(data: []const u8, seek: *usize, state: *TokenizerState, buffer: []
                     },
                     else => {
                         end += 1;
-                        switch(char) {
+                        switch (char) {
                             '\n' => {
                                 state.* = .nil;
-                                return Token {
+                                return Token{
                                     .kind = .value,
-                                    .value = data[start..end-2]
+                                    .value = data[start .. end - 2],
                                 };
                             },
-                            else => {}
+                            else => {},
                         }
-                    }
+                    },
                 }
             },
-
             .string => {
                 end += 1;
-                switch(char) {
+                switch (char) {
                     '\\' => {
                         var nx = data[seek.*];
                         seek.* += 1;
-                        switch(nx) {
+                        switch (nx) {
                             'n' => {
                                 buffer[pointer] = '\n';
                                 pointer += 1;
@@ -268,49 +278,51 @@ fn parseToken(data: []const u8, seek: *usize, state: *TokenizerState, buffer: []
                                 buffer[pointer] = '"';
                                 pointer += 1;
                             },
-                            else => {}
+                            else => {},
                         }
                     },
                     '"' => {
                         state.* = .nil;
-                        return Token {
+                        return Token{
                             .kind = .value,
-                            .value = buffer[0..pointer]
+                            .value = buffer[0..pointer],
                         };
                     },
                     else => {
                         buffer[pointer] = char;
                         pointer += 1;
-                    }
+                    },
                 }
             },
-            
-            else => {}
+            else => {},
         }
     }
-    
+
     return token;
 }
 
+const TEST_BUFFER_SIZE = 64;
 
-// Tests
-// test "parse into map" {
-//     var file = try std.fs.cwd().openFile("src/test.ini", .{ .read = true, .write = false });
-//     defer file.close();
-//     var data = try std.testing.allocator.alloc(u8, try file.getEndPos());
-//     defer std.testing.allocator.free(data);
-//     _ = try file.read(data);
-//     var buffer = try std.testing.allocator.alloc(u8, 256);  // [1]u8{0} ** 256;
-//     defer std.testing.allocator.free(buffer);
+test "parse into map" {
+    var file = try std.fs.cwd().openFile("src/test.ini", .{ .read = true, .write = false });
+    defer file.close();
+    var data = try std.testing.allocator.alloc(u8, try file.getEndPos());
+    defer std.testing.allocator.free(data);
+    _ = try file.read(data);
 
-//     std.debug.print("\n", .{});
-//     var map = try parseIntoMap(data, std.testing.allocator, buffer[0..]);
-//     defer map.deinit();
+    var buffer = try std.testing.allocator.alloc(u8, TEST_BUFFER_SIZE);  // [1]u8{0} ** 256;
+    defer std.testing.allocator.free(buffer);
+    
+    var ini = try parseIntoMap(data, std.testing.allocator, buffer[0..]);
+    defer ini.deinit();
 
-//     for(map.items()) |i| {
-//         std.debug.print("{}\n", .{i});
-//     }
-// }
+    std.testing.expectEqualStrings("John Doe", ini.map.get("owner.name").?);
+    std.testing.expectEqualStrings("Acme Widgets Inc.", ini.map.get("owner.organization").?);
+    std.testing.expectEqualStrings("192.0.2.62", ini.map.get("database.server").?);
+    std.testing.expectEqualStrings("143", ini.map.get("database.port").?);
+    std.testing.expectEqualStrings("payroll.dat", ini.map.get("database.file").?);
+    std.testing.expectEqualStrings("yes", ini.map.get("database.use").?);
+}
 
 test "parse into struct" {
     var file = try std.fs.cwd().openFile("src/test.ini", .{ .read = true, .write = false });
@@ -318,9 +330,10 @@ test "parse into struct" {
     var data = try std.testing.allocator.alloc(u8, try file.getEndPos());
     defer std.testing.allocator.free(data);
     _ = try file.read(data);
-    var buffer = try std.testing.allocator.alloc(u8, 256);
+
+    var buffer = try std.testing.allocator.alloc(u8, TEST_BUFFER_SIZE);
     defer std.testing.allocator.free(buffer);
-    
+
     const Config = struct {
         owner: struct {
             name: []const u8,
@@ -359,12 +372,12 @@ test "parse in comptime into struct" {
                 use: bool,
             },
         };
-        
-        var buffer = [1]u8{0} ** 256;
+
+        var buffer = [1]u8{0} ** TEST_BUFFER_SIZE;
         var config = try parse(Config, data, buffer[0..]);
         break :block config;
     };
-    
+
     std.testing.expectEqualStrings("John Doe", config.owner.name);
     std.testing.expectEqualStrings("Acme Widgets Inc.", config.owner.organization);
     std.testing.expectEqualStrings("192.0.2.62", config.database.server);
