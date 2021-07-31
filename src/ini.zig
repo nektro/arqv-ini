@@ -181,6 +181,9 @@ fn consume(data: []const u8, seek: *usize, state: *TokenizerState) ?Token {
                             state.* = .identifier;
                             start = start;
                             end = start;
+                        } else {
+                            start += 1;
+                            end += 1;
                         }
                     },
                 }
@@ -268,6 +271,7 @@ test "parse into map" {
     try std.testing.expectEqualStrings("143", ini.map.get("database.port").?);
     try std.testing.expectEqualStrings("payroll.dat", ini.map.get("database.file").?);
     try std.testing.expectEqualStrings("yes", ini.map.get("database.use").?);
+    try std.testing.expectEqualStrings("bar", ini.map.get("withtabs.foo").?);
 }
 
 test "parse into struct" {
