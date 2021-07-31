@@ -1,13 +1,7 @@
 const std = @import("std");
 
-const Token = struct {
-    kind: enum {
-        nil, comment, section, identifier, value
-    }, value: ?[]const u8
-};
-const TokenizerState = enum(u3) {
-    nil, comment, section, identifier, value, string
-};
+const Token = struct { kind: enum { nil, comment, section, identifier, value }, value: ?[]const u8 };
+const TokenizerState = enum(u3) { nil, comment, section, identifier, value, string };
 
 const booleanMap = std.ComptimeStringMap(bool, .{
     .{ "1", true },
@@ -56,11 +50,11 @@ pub fn parse(comptime T: type, data: []const u8) !T {
                 if (tk.kind == .value) {
                     switch (@typeInfo(T)) {
                         .Struct => |inf| {
-                            inline for (inf.fields) |f, i| {
+                            inline for (inf.fields) |f| {
                                 if (std.mem.eql(u8, f.name, csec)) {
                                     switch (@typeInfo(@TypeOf(@field(val, f.name)))) {
                                         .Struct => |if2| {
-                                            inline for (if2.fields) |ff, ii| {
+                                            inline for (if2.fields) |ff| {
                                                 if (std.mem.eql(u8, ff.name, cid)) {
                                                     const TT = ff.field_type;
                                                     @field(@field(val, f.name), ff.name) = coerce(TT, tk.value.?) catch unreachable; // error.IniInvalidCoerce;
@@ -113,8 +107,9 @@ pub const IniResult = struct {
     allocator: *std.mem.Allocator,
     pub fn deinit(self: *IniResult) void {
         defer self.map.deinit();
-        for (self.map.items()) |i| {
-            self.allocator.free(i.key);
+        var iter = self.map.iterator();
+        while (iter.next()) |i| {
+            self.allocator.free(i.key_ptr.*);
         }
     }
 };
@@ -122,7 +117,6 @@ pub const IniResult = struct {
 pub fn parseIntoMap(data: []const u8, allocator: *std.mem.Allocator) !IniResult {
     var seek: usize = 0;
     var state: TokenizerState = .nil;
-    var pstate: TokenizerState = .nil;
     var csec: []const u8 = "";
     var cid: []const u8 = "";
     var map = IniMap.init(allocator);
@@ -137,8 +131,7 @@ pub fn parseIntoMap(data: []const u8, allocator: *std.mem.Allocator) !IniResult 
                 cid = token.value.?;
                 var tk = consume(data[0..], &seek, &state).?;
                 if (tk.kind == .value) {
-                    var len = std.fmt.count("{}.{}", .{ csec, cid });
-                    var coc = try std.fmt.allocPrint(allocator, "{}.{}", .{ csec, cid });
+                    var coc = try std.fmt.allocPrint(allocator, "{s}.{s}", .{ csec, cid });
                     try map.putNoClobber(coc, tk.value.?);
                 } else {
                     return error.IniSyntaxError;
@@ -149,10 +142,7 @@ pub fn parseIntoMap(data: []const u8, allocator: *std.mem.Allocator) !IniResult 
             },
         }
     }
-    return IniResult {
-        .map = map,
-        .allocator = allocator
-    };
+    return IniResult{ .map = map, .allocator = allocator };
 }
 
 fn consume(data: []const u8, seek: *usize, state: *TokenizerState) ?Token {
@@ -268,16 +258,16 @@ test "parse into map" {
     var data = try std.testing.allocator.alloc(u8, try file.getEndPos());
     defer std.testing.allocator.free(data);
     _ = try file.read(data);
-    
+
     var ini = try parseIntoMap(data, std.testing.allocator);
     defer ini.deinit();
 
-    std.testing.expectEqualStrings("John Doe", ini.map.get("owner.name").?);
-    std.testing.expectEqualStrings("Acme Widgets Inc.", ini.map.get("owner.organization").?);
-    std.testing.expectEqualStrings("192.0.2.62", ini.map.get("database.server").?);
-    std.testing.expectEqualStrings("143", ini.map.get("database.port").?);
-    std.testing.expectEqualStrings("payroll.dat", ini.map.get("database.file").?);
-    std.testing.expectEqualStrings("yes", ini.map.get("database.use").?);
+    try std.testing.expectEqualStrings("John Doe", ini.map.get("owner.name").?);
+    try std.testing.expectEqualStrings("Acme Widgets Inc.", ini.map.get("owner.organization").?);
+    try std.testing.expectEqualStrings("192.0.2.62", ini.map.get("database.server").?);
+    try std.testing.expectEqualStrings("143", ini.map.get("database.port").?);
+    try std.testing.expectEqualStrings("payroll.dat", ini.map.get("database.file").?);
+    try std.testing.expectEqualStrings("yes", ini.map.get("database.use").?);
 }
 
 test "parse into struct" {
@@ -302,12 +292,12 @@ test "parse into struct" {
 
     var config = try parse(Config, data);
 
-    std.testing.expectEqualStrings("John Doe", config.owner.name);
-    std.testing.expectEqualStrings("Acme Widgets Inc.", config.owner.organization);
-    std.testing.expectEqualStrings("192.0.2.62", config.database.server);
-    std.testing.expectEqual(@as(usize, 143), config.database.port);
-    std.testing.expectEqualStrings("payroll.dat", config.database.file);
-    std.testing.expectEqual(true, config.database.use);
+    try std.testing.expectEqualStrings("John Doe", config.owner.name);
+    try std.testing.expectEqualStrings("Acme Widgets Inc.", config.owner.organization);
+    try std.testing.expectEqualStrings("192.0.2.62", config.database.server);
+    try std.testing.expectEqual(@as(usize, 143), config.database.port);
+    try std.testing.expectEqualStrings("payroll.dat", config.database.file);
+    try std.testing.expectEqual(true, config.database.use);
 }
 
 test "parse in comptime into struct" {
@@ -330,10 +320,10 @@ test "parse in comptime into struct" {
         break :block config;
     };
 
-    std.testing.expectEqualStrings("John Doe", config.owner.name);
-    std.testing.expectEqualStrings("Acme Widgets Inc.", config.owner.organization);
-    std.testing.expectEqualStrings("192.0.2.62", config.database.server);
-    std.testing.expectEqual(@as(usize, 143), config.database.port);
-    std.testing.expectEqualStrings("payroll.dat", config.database.file);
-    std.testing.expectEqual(true, config.database.use);
+    try std.testing.expectEqualStrings("John Doe", config.owner.name);
+    try std.testing.expectEqualStrings("Acme Widgets Inc.", config.owner.organization);
+    try std.testing.expectEqualStrings("192.0.2.62", config.database.server);
+    try std.testing.expectEqual(@as(usize, 143), config.database.port);
+    try std.testing.expectEqualStrings("payroll.dat", config.database.file);
+    try std.testing.expectEqual(true, config.database.use);
 }
