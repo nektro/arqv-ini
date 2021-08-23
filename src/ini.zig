@@ -159,7 +159,7 @@ fn consume(data: []const u8, seek: *usize, state: *TokenizerState) ?Token {
         switch (state.*) {
             .nil => {
                 switch (char) {
-                    ';' => {
+                    ';', '#' => {
                         state.* = .comment;
                         start = seek.*;
                         if (std.ascii.isSpace(data[start])) start += 1;
@@ -226,7 +226,7 @@ fn consume(data: []const u8, seek: *usize, state: *TokenizerState) ?Token {
             },
             .value => {
                 switch (char) {
-                    ';' => {
+                    ';', '#' => {
                         state.* = .comment;
                         return Token{
                             .kind = .value,
