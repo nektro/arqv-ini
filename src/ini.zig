@@ -1,7 +1,23 @@
 const std = @import("std");
 
-const Token = struct { kind: enum { nil, comment, section, identifier, value }, value: ?[]const u8 };
-const TokenizerState = enum(u3) { nil, comment, section, identifier, value, string };
+const Token = struct {
+    kind: enum {
+        nil,
+        comment,
+        section,
+        identifier,
+        value,
+    },
+    value: ?[]const u8,
+};
+const TokenizerState = enum(u3) {
+    nil,
+    comment,
+    section,
+    identifier,
+    value,
+    string,
+};
 
 const booleanMap = std.ComptimeStringMap(bool, .{
     .{ "1", true },
@@ -34,112 +50,87 @@ const booleanMap = std.ComptimeStringMap(bool, .{
 
 pub fn parse(comptime T: type, data: []const u8) !T {
     var seek: usize = 0;
-    var state: TokenizerState = .nil;
+    var state = TokenizerState.nil;
     var val = std.mem.zeroes(T);
-    var csec: []const u8 = "";
-    var cid: []const u8 = "";
+    var csec: []const u8 = undefined;
+    var cid: []const u8 = undefined;
+
     while (consume(data[0..], &seek, &state)) |token| {
         switch (token.kind) {
-            .nil => {},
-            .section => {
-                csec = token.value.?;
-            },
+            .nil, .comment => {},
+            .section => csec = token.value.?,
             .identifier => {
                 cid = token.value.?;
-                var tk = consume(data[0..], &seek, &state).?;
-                if (tk.kind == .value) {
-                    switch (@typeInfo(T)) {
-                        .Struct => |inf| {
-                            inline for (inf.fields) |f| {
-                                if (std.mem.eql(u8, f.name, csec)) {
-                                    switch (@typeInfo(@TypeOf(@field(val, f.name)))) {
-                                        .Struct => |if2| {
-                                            inline for (if2.fields) |ff| {
-                                                if (std.mem.eql(u8, ff.name, cid)) {
-                                                    const TT = ff.field_type;
-                                                    @field(@field(val, f.name), ff.name) = coerce(TT, tk.value.?) catch unreachable; // error.IniInvalidCoerce;
-                                                }
-                                            }
-                                        },
-                                        else => {
-                                            @compileError("Naked field in archetype.");
-                                        },
-                                    }
-                                }
-                            }
-                        },
-                        else => {
-                            @compileError("Invalid archetype");
-                        },
-                    }
-                } else {
+                const tk = consume(data[0..], &seek, &state).?;
+                if (tk.kind != .value)
                     return error.IniSyntaxError;
+                const info1 = @typeInfo(T);
+                if (info1 != .Struct)
+                    @compileError("Invalid Archetype");
+
+                inline for (info1.Struct.fields) |f| {
+                    if (std.mem.eql(u8, f.name, csec)) {
+                        const info2 = @typeInfo(@TypeOf(@field(val, f.name)));
+                        if (info2 != .Struct)
+                            @compileError("Naked field in archetype");
+
+                        inline for (info2.Struct.fields) |ff| {
+                            if (std.mem.eql(u8, ff.name, cid)) {
+                                const TT = ff.field_type;
+                                @field(@field(val, f.name), ff.name) = coerce(TT, tk.value.?) catch unreachable; // error.IniInvalidCoerce;
+                            }
+                        }
+                    }
                 }
             },
-            .comment => {},
-            else => {
-                return error.IniSyntaxError;
-            },
+            else => return error.IniSyntaxError,
         }
     }
     return val;
 }
+
 fn coerce(comptime T: type, v: []const u8) !T {
-    switch (@typeInfo(T)) {
-        .Bool => {
-            return booleanMap.get(v).?;
-        },
-        .Float, .ComptimeFloat => {
-            return try std.fmt.parseFloat(T, v);
-        },
-        .Int, .ComptimeInt => {
-            return try std.fmt.parseInt(T, v, 10);
-        },
-        else => {
-            return @as(T, v);
-        },
-    }
+    return switch (@typeInfo(T)) {
+        .Bool => booleanMap.get(v).?,
+        .Float, .ComptimeFloat => try std.fmt.parseFloat(T, v),
+        .Int, .ComptimeInt => try std.fmt.parseInt(T, v, 10),
+        else => @as(T, v),
+    };
 }
 
 const IniMap = std.StringHashMap([]const u8);
 pub const IniResult = struct {
     map: IniMap,
     allocator: *std.mem.Allocator,
+
     pub fn deinit(self: *IniResult) void {
         defer self.map.deinit();
         var iter = self.map.iterator();
-        while (iter.next()) |i| {
+        while (iter.next()) |i|
             self.allocator.free(i.key_ptr.*);
-        }
     }
 };
 
 pub fn parseIntoMap(data: []const u8, allocator: *std.mem.Allocator) !IniResult {
     var seek: usize = 0;
-    var state: TokenizerState = .nil;
-    var csec: []const u8 = "";
-    var cid: []const u8 = "";
+    var state = TokenizerState.nil;
+    var csec: []const u8 = undefined;
+    var cid: []const u8 = undefined;
     var map = IniMap.init(allocator);
+
     while (consume(data[0..], &seek, &state)) |token| {
         switch (token.kind) {
-            .nil => {},
-            .comment => {},
-            .section => {
-                csec = token.value.?;
-            },
+            .nil, .comment => {},
+            .section => csec = token.value.?,
             .identifier => {
                 cid = token.value.?;
                 var tk = consume(data[0..], &seek, &state).?;
-                if (tk.kind == .value) {
-                    var coc = try std.fmt.allocPrint(allocator, "{s}.{s}", .{ csec, cid });
-                    try map.putNoClobber(coc, tk.value.?);
-                } else {
+                if (tk.kind != .value)
                     return error.IniSyntaxError;
-                }
+                var coc = try std.fmt.allocPrint(allocator, "{s}.{s}", .{ csec, cid });
+                try map.putNoClobber(coc, tk.value.?);
             },
-            else => {
-                return error.IniSyntaxError;
-            },
+            else => return error.IniSyntaxError,
         }
     }
     return IniResult{ .map = map, .allocator = allocator };
