@@ -1,6 +1,9 @@
 # ini
 Zig library for opening `.ini` files.
 
+**Warning: this library isn't maintained anymore, as I am no longer able to write Zig due to various constrains. I will
+gladly accept any pull requests to help keep this functional, but no more features will be added. Thanks.**
+
 ## usage
 assuming that the file at `path` contains the following:
 ```ini
