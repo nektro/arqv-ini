@@ -101,7 +101,7 @@ fn coerce(comptime T: type, v: []const u8) !T {
 const IniMap = std.StringHashMap([]const u8);
 pub const IniResult = struct {
     map: IniMap,
-    allocator: *std.mem.Allocator,
+    allocator: std.mem.Allocator,
 
     pub fn deinit(self: *IniResult) void {
         defer self.map.deinit();
@@ -111,7 +111,7 @@ pub const IniResult = struct {
     }
 };
 
-pub fn parseIntoMap(data: []const u8, allocator: *std.mem.Allocator) !IniResult {
+pub fn parseIntoMap(data: []const u8, allocator: std.mem.Allocator) !IniResult {
     var seek: usize = 0;
     var state = TokenizerState.nil;
     var csec: []const u8 = undefined;
