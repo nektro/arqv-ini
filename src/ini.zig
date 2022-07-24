@@ -196,7 +196,7 @@ fn consume(data: []const u8, seek: *usize, state: *TokenizerState) ?Token {
                         state.* = .nil;
                         return Token{
                             .kind = .comment,
-                            .value = data[start .. end - 2],
+                            .value = data[start .. std.math.max(start, end - 2)],
                         };
                     },
                     else => {},
@@ -247,7 +247,7 @@ fn consume(data: []const u8, seek: *usize, state: *TokenizerState) ?Token {
 }
 
 test "parse into map" {
-    var file = try std.fs.cwd().openFile("src/test.ini", .{ .read = true, .write = false });
+    var file = try std.fs.cwd().openFile("src/test.ini", .{ .mode = .read_only });
     defer file.close();
     var data = try std.testing.allocator.alloc(u8, try file.getEndPos());
     defer std.testing.allocator.free(data);
@@ -266,7 +266,7 @@ test "parse into map" {
 }
 
 test "parse into struct" {
-    var file = try std.fs.cwd().openFile("src/test.ini", .{ .read = true, .write = false });
+    var file = try std.fs.cwd().openFile("src/test.ini", .{ .mode = .read_only });
     defer file.close();
     var data = try std.testing.allocator.alloc(u8, try file.getEndPos());
     defer std.testing.allocator.free(data);
