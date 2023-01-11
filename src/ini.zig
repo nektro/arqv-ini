@@ -128,7 +128,7 @@ pub fn parseIntoMap(data: []const u8, allocator: std.mem.Allocator) !IniResult {
                 if (tk.kind != .value)
                     return error.IniSyntaxError;
                 var coc = try std.fmt.allocPrint(allocator, "{s}.{s}", .{ csec, cid });
-                try map.putNoClobber(coc, tk.value.?);
+                try map.put(coc, tk.value.?);
             },
             else => return error.IniSyntaxError,
         }
