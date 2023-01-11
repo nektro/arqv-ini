@@ -153,7 +153,7 @@ fn consume(data: []const u8, seek: *usize, state: *TokenizerState) ?Token {
                     ';', '#' => {
                         state.* = .comment;
                         start = seek.*;
-                        if (std.ascii.isSpace(data[start])) start += 1;
+                        if (std.ascii.isWhitespace(data[start])) start += 1;
                         end = start;
                     },
                     '[' => {
@@ -164,11 +164,11 @@ fn consume(data: []const u8, seek: *usize, state: *TokenizerState) ?Token {
                     '=' => {
                         state.* = .value;
                         start = seek.*;
-                        if (std.ascii.isSpace(data[start])) start += 1;
+                        if (std.ascii.isWhitespace(data[start])) start += 1;
                         end = start;
                     },
                     else => {
-                        if (!std.ascii.isSpace(char)) {
+                        if (!std.ascii.isWhitespace(char)) {
                             state.* = .identifier;
                             start = start;
                             end = start;
@@ -181,7 +181,7 @@ fn consume(data: []const u8, seek: *usize, state: *TokenizerState) ?Token {
             },
             .identifier => {
                 end += 1;
-                if (!(std.ascii.isAlNum(char) or char == '_')) {
+                if (!(std.ascii.isAlphanumeric(char) or char == '_')) {
                     state.* = .nil;
                     return Token{
                         .kind = .identifier,
@@ -196,7 +196,7 @@ fn consume(data: []const u8, seek: *usize, state: *TokenizerState) ?Token {
                         state.* = .nil;
                         return Token{
                             .kind = .comment,
-                            .value = data[start .. std.math.max(start, end - 2)],
+                            .value = data[start..std.math.max(start, end - 2)],
                         };
                     },
                     else => {},
