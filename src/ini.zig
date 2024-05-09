@@ -124,10 +124,10 @@ pub fn parseIntoMap(data: []const u8, allocator: std.mem.Allocator) !IniResult {
             .section => csec = token.value.?,
             .identifier => {
                 cid = token.value.?;
-                var tk = consume(data[0..], &seek, &state).?;
+                const tk = consume(data[0..], &seek, &state).?;
                 if (tk.kind != .value)
                     return error.IniSyntaxError;
-                var coc = try std.fmt.allocPrint(allocator, "{s}.{s}", .{ csec, cid });
+                const coc = try std.fmt.allocPrint(allocator, "{s}.{s}", .{ csec, cid });
                 try map.put(coc, tk.value.?);
             },
             else => return error.IniSyntaxError,
@@ -138,7 +138,7 @@ pub fn parseIntoMap(data: []const u8, allocator: std.mem.Allocator) !IniResult {
 
 fn consume(data: []const u8, seek: *usize, state: *TokenizerState) ?Token {
     if (seek.* >= data.len) return null;
-    var token: Token = std.mem.zeroes(Token);
+    const token: Token = std.mem.zeroes(Token);
     var start = seek.*;
     var end = start;
     var char: u8 = 0;
@@ -249,7 +249,7 @@ fn consume(data: []const u8, seek: *usize, state: *TokenizerState) ?Token {
 test "parse into map" {
     var file = try std.fs.cwd().openFile("src/test.ini", .{ .mode = .read_only });
     defer file.close();
-    var data = try std.testing.allocator.alloc(u8, try file.getEndPos());
+    const data = try std.testing.allocator.alloc(u8, try file.getEndPos());
     defer std.testing.allocator.free(data);
     _ = try file.read(data);
 
@@ -268,7 +268,7 @@ test "parse into map" {
 test "parse into struct" {
     var file = try std.fs.cwd().openFile("src/test.ini", .{ .mode = .read_only });
     defer file.close();
-    var data = try std.testing.allocator.alloc(u8, try file.getEndPos());
+    const data = try std.testing.allocator.alloc(u8, try file.getEndPos());
     defer std.testing.allocator.free(data);
     _ = try file.read(data);
 
@@ -285,7 +285,7 @@ test "parse into struct" {
         },
     };
 
-    var config = try parse(Config, data);
+    const config = try parse(Config, data);
 
     try std.testing.expectEqualStrings("John Doe", config.owner.name);
     try std.testing.expectEqualStrings("Acme Widgets Inc.", config.owner.organization);
@@ -311,7 +311,7 @@ test "parse in comptime into struct" {
             },
         };
 
-        var config = try parse(Config, data);
+        const config = try parse(Config, data);
         break :block config;
     };
 
