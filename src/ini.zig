@@ -19,7 +19,7 @@ const TokenizerState = enum(u3) {
     string,
 };
 
-const booleanMap = std.ComptimeStringMap(bool, .{
+const booleanMap = std.StaticStringMap(bool).initComptime(.{
     .{ "1", true },
     .{ "enabled", true },
     .{ "Enabled", true },
@@ -76,7 +76,7 @@ pub fn parse(comptime T: type, data: []const u8) !T {
 
                         inline for (info2.Struct.fields) |ff| {
                             if (std.mem.eql(u8, ff.name, cid)) {
-                                const TT = ff.field_type;
+                                const TT = ff.type;
                                 @field(@field(val, f.name), ff.name) = coerce(TT, tk.value.?) catch unreachable; // error.IniInvalidCoerce;
                             }
                         }
