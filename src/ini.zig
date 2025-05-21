@@ -65,16 +65,16 @@ pub fn parse(comptime T: type, data: []const u8) !T {
                 if (tk.kind != .value)
                     return error.IniSyntaxError;
                 const info1 = @typeInfo(T);
-                if (info1 != .Struct)
+                if (info1 != .@"struct")
                     @compileError("Invalid Archetype");
 
-                inline for (info1.Struct.fields) |f| {
+                inline for (info1.@"struct".fields) |f| {
                     if (std.mem.eql(u8, f.name, csec)) {
                         const info2 = @typeInfo(@TypeOf(@field(val, f.name)));
-                        if (info2 != .Struct)
+                        if (info2 != .@"struct")
                             @compileError("Naked field in archetype");
 
-                        inline for (info2.Struct.fields) |ff| {
+                        inline for (info2.@"struct".fields) |ff| {
                             if (std.mem.eql(u8, ff.name, cid)) {
                                 const TT = ff.type;
                                 @field(@field(val, f.name), ff.name) = coerce(TT, tk.value.?) catch unreachable; // error.IniInvalidCoerce;
@@ -91,9 +91,9 @@ pub fn parse(comptime T: type, data: []const u8) !T {
 
 fn coerce(comptime T: type, v: []const u8) !T {
     return switch (@typeInfo(T)) {
-        .Bool => booleanMap.get(v).?,
-        .Float, .ComptimeFloat => try std.fmt.parseFloat(T, v),
-        .Int, .ComptimeInt => try std.fmt.parseInt(T, v, 10),
+        .bool => booleanMap.get(v).?,
+        .float, .comptime_float => try std.fmt.parseFloat(T, v),
+        .int, .comptime_int => try std.fmt.parseInt(T, v, 10),
         else => @as(T, v),
     };
 }
