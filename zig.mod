@@ -3,4 +3,5 @@ name: ini
 main: src/ini.zig
 license: MIT
 description: .ini parser for Zig
-dependencies:
+root_dependencies:
+  - src: git https://github.com/nektro/zig-nfs

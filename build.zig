@@ -1,4 +1,5 @@
 const std = @import("std");
+const deps = @import("./deps.zig");
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
@@ -14,6 +15,8 @@ pub fn build(b: *std.Build) void {
             .optimize = mode,
         }),
     });
+    deps.addAllTo(lib);
+    lib.root_module.link_libc = true;
     lib.use_llvm = !disable_llvm;
     lib.use_lld = !disable_llvm;
     b.installArtifact(lib);
@@ -25,8 +28,11 @@ pub fn build(b: *std.Build) void {
             .optimize = mode,
         }),
     });
+    deps.addAllTo(main_tests);
+    main_tests.root_module.link_libc = true;
     main_tests.use_llvm = !disable_llvm;
     main_tests.use_lld = !disable_llvm;
+    b.getInstallStep().dependOn(&main_tests.step);
 
     const test_run = b.addRunArtifact(main_tests);
     test_run.setCwd(b.path("."));
